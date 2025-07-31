@@ -20,6 +20,7 @@ from PIL import Image     # For image loading (future texture support)
 from pyrr import Matrix44, Vector3  # For 3D math operations
 from model_loader import load_obj  # Our custom OBJ loader
 from model import Model
+from scene import Scene
 
 class Renderer:
     """
@@ -110,12 +111,12 @@ class Renderer:
         glfw.set_framebuffer_size_callback(self.window, self._on_resize)  # Window resize
         glfw.set_key_callback(self.window, self._on_key)  # Keyboard input
         
-        # Store loaded models
-        self.models = {}
-        
+        # Scene management
+        self.scene = Scene()
+
         # Initialize the renderer
         self._init_renderer()
-        
+
         # Load default models
         self._load_default_models()
     
@@ -150,9 +151,9 @@ class Renderer:
             print(f"Error loading texture {file_path}: {e}")
             return None
     
-    def load_model(self, name, file_path):
+    def load_model(self, name, file_path, position=None, rotation=None, scale=None):
         """
-        Load a 3D model from an OBJ file with optional textures.
+        Load a 3D model from an OBJ file with optional textures and add to the scene.
         """
         mesh_data = load_obj(file_path)
         model = Model(self.ctx, mesh_data, self.prog)
@@ -160,7 +161,7 @@ class Renderer:
         if mesh_data.material and getattr(mesh_data.material, 'diffuse_texture', None):
             texture = self._load_texture(mesh_data.material.diffuse_texture)
             model.set_texture(texture)
-        self.models[name] = model
+        self.scene.add_object(name, model, position, rotation, scale)
         print(f"Model loaded: {name} ({len(mesh_data.vertices)} vertices, {len(mesh_data.indices)} indices)")
         return model
 
@@ -171,19 +172,17 @@ class Renderer:
     
     def render_model(self, name, position=None, rotation=None, scale=None):
         """
-        Render a loaded 3D model with optional texture.
-        
-        Args:
-            name (str): Name of the model to render
-            position (list): [x, y, z] position
-            rotation (list): [x, y, z] rotation in degrees
-            scale (float or list): Uniform scale or [x, y, z] scale
+        Render a model from the scene with optional transform overrides.
         """
-        if name not in self.models:
-            print(f"Model '{name}' not found!")
+        obj = dict(self.scene.objects.get(name, {}))
+        if not obj or 'model' not in obj:
+            print(f"Model '{name}' not found in scene!")
             return
-            
-        model = self.models[name]
+        model = obj['model']
+        # Use overrides if provided, else use scene values
+        position = position if position is not None else obj.get('position')
+        rotation = rotation if rotation is not None else obj.get('rotation')
+        scale = scale if scale is not None else obj.get('scale')
 
         # Start with an identity matrix
         model_matrix = Matrix44.identity()
@@ -473,10 +472,10 @@ class Renderer:
             self.prog['projection'].write(projection.astype('f4').tobytes())
             self.prog['viewPos'].write(self.camera_pos.astype('f4').tobytes())
             
-            # Draw all loaded models (simplified, only textured models remain)
-            for model_name in self.models:
-                self.render_model(model_name)
-            
+            # Draw all objects in the scene
+            for name, obj in self.scene.get_objects():
+                self.render_model(name, obj.get('position'), obj.get('rotation'), obj.get('scale'))
+        
             # Swap buffers and poll events
             glfw.swap_buffers(self.window)
             glfw.poll_events()

@@ -87,23 +87,27 @@ For a deeper dive, see [`docs/RENDERER_DETAILS.md`](docs/RENDERER_DETAILS.md).
 
 ## Project Structure
 
-- `renderer.py`: Main renderer implementation
-- `model_loader.py`: OBJ/MTL model and material loader
-- `model.py`: Model abstraction
-- `src/shaders/`: Vertex and fragment shaders (GLSL)
+- `src/`: Main source code
+  - `renderer.py`: Main renderer implementation
+  - `scene.py`: Manages 3D objects and their transforms
+  - `model_loader.py`: OBJ/MTL model and material loader
+  - `model.py`: Model abstraction
+  - `shaders/`: Vertex and fragment shaders (GLSL)
 - `docs/`: Technical and shader documentation
 - `tests/`: Example tests and assets
+- `models/`: Example 3D model assets
 - `requirements.txt`: Python dependencies
 
 ---
 
 ## Example Usage
 
-Load and render a textured OBJ model:
+Load and render a textured OBJ model (managed by the Scene class):
 ```python
 from renderer import Renderer
 renderer = Renderer()
-renderer.load_model('my_cube', 'models/textured_cube.obj')
+renderer.load_model('my_cube', 'models/textured_cube.obj')  # Adds model to renderer.scene
+# The model is now managed by renderer.scene
 renderer.render()
 ```
 
@@ -119,6 +123,7 @@ renderer.render()
 
 ## Glossary
 
+- **Scene:** A container for all renderable objects, managing models and their transforms (position, rotation, scale).
 - **Shader:** Program that runs on the GPU to process vertices or pixels.
 - **Material:** Set of parameters (e.g., textures, colors) and a reference to a shader, describing how a surface appears.
 - **Model:** 3D geometry (mesh) that can be rendered.
@@ -133,24 +138,7 @@ renderer.render()
 - Mouse: Look around
 - `ESC`: Close the window
 
-## Project Structure
 
-- `renderer.py`: Main renderer implementation
-- `model_loader.py`: OBJ/MTL model and material loader
-- `models/`: Example OBJ, MTL, and texture assets
-- `src/shaders/`: Vertex and fragment shaders (GLSL)
-- `docs/`: Technical and shader documentation
-- `requirements.txt`: Python dependencies
-
-## Example Usage
-
-Load and render a textured OBJ model:
-```python
-from renderer import Renderer
-renderer = Renderer()
-renderer.load_model('my_cube', 'models/textured_cube.obj')
-renderer.render()
-```
 
 ## License
 

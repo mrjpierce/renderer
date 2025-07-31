@@ -25,4 +25,5 @@ if __name__ == "__main__":
     except Exception as e:
         pass  # Optionally handle error or log
     renderer.load_model("test_cube", model_path)
+    assert "test_cube" in renderer.scene.objects
     renderer.render()

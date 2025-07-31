@@ -17,7 +17,10 @@ The renderer is built using a modular architecture with these key components:
 - **Shader System**: Handles GLSL shader compilation and linking
 - **Camera System**: Manages view and projection matrices, handles user input
 - **Buffer Management**: Handles vertex and index buffer objects (VBOs/IBOs)
-- **Scene Graph**: Manages 3D objects and their transformations
+- **Scene Management**: The `Scene` class manages all 3D objects, their transforms, and hierarchy
+  - Tracks models with their positions, rotations, and scales
+  - Provides methods for adding/removing objects
+  - Maintains a clean separation between rendering and object management
 
 ### High-Level Architecture Diagram
 
@@ -26,17 +29,46 @@ flowchart TD
     A[App Entry Point] --> B[Renderer Initialization]
     B --> C[Load Shaders]
     B --> D[Create Window & OpenGL Context]
-    B --> E[Load Models]
-    E --> F[Model/Material/Texture Setup]
-    B --> G[Main Render Loop]
-    G --> H[Process Input]
-    G --> I[Update Camera]
-    G --> J[Draw Models]
-    J --> K[Bind Shader & Material]
-    J --> L[Draw Mesh]
+    B --> E[Create Scene]
+    B --> F[Load Models]
+    F --> G[Add to Scene with Transforms]
+    B --> H[Main Render Loop]
+    H --> I[Process Input]
+    H --> J[Update Camera]
+    H --> K[Render Scene]
+    K --> L[For Each Object in Scene]
+    L --> M[Apply Transforms]
+    L --> N[Bind Shader & Material]
+    L --> O[Draw Mesh]
 ```
 
 This diagram summarizes the main flow from app startup to rendering each frame.
+
+## Scene Management
+
+The renderer uses a `Scene` class to manage all 3D objects in the world. This provides a clean separation between rendering logic and object management.
+
+### Key Features
+- **Object Management**: Add/remove models with a simple API
+- **Transform Hierarchy**: Each object maintains its own position, rotation, and scale
+- **Separation of Concerns**: Scene handles object management while Renderer focuses on rendering
+
+### Usage Example
+```python
+# Create a renderer and load a model
+renderer = Renderer()
+renderer.load_model('my_model', 'model.obj', 
+                   position=[0, 0, -5], 
+                   rotation=[0, 0, 0],
+                   scale=1.0)
+
+# The model is automatically added to renderer.scene
+assert 'my_model' in renderer.scene.objects
+
+# Access and modify scene objects
+obj = renderer.scene.objects['my_model']
+obj['position'][0] += 1.0  # Move right
+```
 
 ## Rendering Pipeline
 
@@ -130,14 +162,21 @@ def render(self):
     while not glfw.window_should_close(self.window):
         self._process_input()
         self._update_camera()
-        for model_name in self.models:
-            self.render_model(model_name)
+        
+        # Render all objects in the scene
+        for name, obj in self.scene.get_objects():
+            self.render_model(name, 
+                           obj.get('position'), 
+                           obj.get('rotation'), 
+                           obj.get('scale'))
+                            
         glfw.swap_buffers(self.window)
         glfw.poll_events()
 ```
-- Handles input and camera movement.
-- Draws each loaded model using the current shader/material.
-- Swaps display buffers and processes window events.
+- Handles input and camera movement
+- Iterates through all objects in the scene
+- Renders each object with its individual transforms
+- Swaps display buffers and processes window events
 
 For more, see the `renderer.py` source and the test walkthrough in `tests/render_model/README.md`.
 
