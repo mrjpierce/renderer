@@ -90,6 +90,7 @@ For a deeper dive, see [`docs/RENDERER_DETAILS.md`](docs/RENDERER_DETAILS.md).
 - `src/`: Main source code
   - `renderer.py`: Main renderer implementation
   - `scene.py`: Manages 3D objects and their transforms
+  - `camera.py`: Camera implementation (view/projection, movement, mouse look)
   - `model_loader.py`: OBJ/MTL model and material loader
   - `model.py`: Model abstraction
   - `shaders/`: Vertex and fragment shaders (GLSL)
@@ -132,12 +133,25 @@ renderer.render()
 
 ---
 
-## Controls
+## Camera Controls
 
-- `WASD`: Move camera
-- Mouse: Look around
+The renderer features a flexible first-person camera system with the following controls:
+
+### Movement
+- `W`: Move forward
+- `S`: Move backward
+- `A`: Strafe left
+- `D`: Strafe right
+- `Left Shift`: Hold to increase movement speed (1.5x boost)
+
+### View Control
+- Move mouse: Look around (mouse look)
+- Mouse wheel: Zoom in/out (adjust field of view)
+
+### Window
 - `ESC`: Close the window
 
+The camera system provides smooth movement and proper handling of aspect ratio changes when the window is resized. The camera uses a right-handed coordinate system with Y-up orientation.
 
 
 ## License

@@ -16,11 +16,15 @@ import math               # For mathematical functions and constants
 import sys                # For system-specific functions and variables
 import time               # For timing and sleep functionality
 import os                 # For file path operations
+from pathlib import Path  # For cross-platform path handling
 from PIL import Image     # For image loading (future texture support)
 from pyrr import Matrix44, Vector3  # For 3D math operations
+
+# Local imports
 from model_loader import load_obj  # Our custom OBJ loader
 from model import Model
 from scene import Scene
+from camera import Camera  # Our new Camera class
 
 class Renderer:
     """
@@ -49,16 +53,14 @@ class Renderer:
         self.vao = None      # Vertex Array Object (holds vertex data and attributes)
         self.prog = None     # Shader program
         
-        # Camera settings
-        # Position the camera slightly back and above the origin
-        self.camera_pos = Vector3([0.0, 0.0, 3.0])  # Camera position in world space
-        self.camera_front = Vector3([0.0, 0.0, -1.0])  # Camera's forward direction
-        self.camera_up = Vector3([0.0, 1.0, 0.0])     # Camera's up vector
-        self.camera_speed = 0.05  # Base movement speed (adjusted by delta time)
-        
-        # Mouse look variables
-        self.yaw = -90.0    # Initial yaw (rotation around Y axis)
-        self.pitch = 0.0    # Initial pitch (rotation around X axis)
+        # Initialize the camera
+        self.camera = Camera(
+            position=Vector3([0.0, 0.0, 3.0]),  # Start slightly back from origin
+            up=Vector3([0.0, 1.0, 0.0]),        # Y is up
+            yaw=-90.0,                          # Look along -Z axis
+            pitch=0.0                           # Level horizon
+        )
+        self.camera_speed = 2.5  # Base movement speed (will be scaled by delta_time)
         self.first_mouse = True  # Flag for initial mouse movement
         self.last_x = width / 2  # Last X position of the mouse
         self.last_y = height / 2  # Last Y position of the mouse
@@ -216,7 +218,7 @@ class Renderer:
 
         # Update the model matrix in the shader
         self.prog['model'].write(model_matrix.astype('f4').tobytes())
-        self.prog['viewPos'].write(np.array(self.camera_pos, dtype='f4').tobytes())
+        self.prog['viewPos'].write(np.array(self.camera.position, dtype='f4').tobytes())
 
         # Set material properties if available
         if hasattr(model, 'material') and model.material:
@@ -361,81 +363,76 @@ class Renderer:
         self.ctx.enable(moderngl.DEPTH_TEST)
     
     def _on_resize(self, window, width, height):
+        """
+        Handle window resize events.
+        
+        Args:
+            window: The GLFW window that was resized
+            width (int): New width of the window
+            height (int): New height of the window
+        """
         self.width = width
         self.height = height
         self.ctx.viewport = (0, 0, width, height)
+        
+        # Update camera's aspect ratio
+        if hasattr(self, 'camera') and self.camera is not None:
+            self.camera.set_aspect_ratio(width, height)
     
     def _on_key(self, window, key, scancode, action, mods):
         if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
             glfw.set_window_should_close(window, True)
     
     def _process_movement(self):
-        # Base movement speed (increased from 2.5 to 4.0)
-        camera_speed = 4.0 * self.delta_time
+        """
+        Process keyboard input for camera movement.
+        Handles WASD keys for movement and Shift for speed boost.
+        """
+        # Check for speed boost (Shift key)
+        speed_boost = 1.5 if (glfw.get_key(self.window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS or 
+                            glfw.get_key(self.window, glfw.KEY_RIGHT_SHIFT) == glfw.PRESS) else 1.0
         
-        # Speed boost when holding shift (1.5x speed)
-        if glfw.get_key(self.window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS or \
-           glfw.get_key(self.window, glfw.KEY_RIGHT_SHIFT) == glfw.PRESS:
-            camera_speed *= 1.5
-            
-        # Movement controls
+        # Process movement keys
         if glfw.get_key(self.window, glfw.KEY_W) == glfw.PRESS:
-            self.camera_pos += camera_speed * self.camera_front
+            self.camera.process_keyboard('FORWARD', self.delta_time, self.camera_speed * speed_boost)
         if glfw.get_key(self.window, glfw.KEY_S) == glfw.PRESS:
-            self.camera_pos -= camera_speed * self.camera_front
-            
-        # Calculate right vector once for strafing
-        if glfw.get_key(self.window, glfw.KEY_A) == glfw.PRESS or \
-           glfw.get_key(self.window, glfw.KEY_D) == glfw.PRESS:
-            right = np.cross(self.camera_front, self.camera_up)
-            right = right / np.linalg.norm(right)
-            
-            if glfw.get_key(self.window, glfw.KEY_A) == glfw.PRESS:
-                self.camera_pos -= right * camera_speed
-            if glfw.get_key(self.window, glfw.KEY_D) == glfw.PRESS:
-                self.camera_pos += right * camera_speed
+            self.camera.process_keyboard('BACKWARD', self.delta_time, self.camera_speed * speed_boost)
+        if glfw.get_key(self.window, glfw.KEY_A) == glfw.PRESS:
+            self.camera.process_keyboard('LEFT', self.delta_time, self.camera_speed * speed_boost)
+        if glfw.get_key(self.window, glfw.KEY_D) == glfw.PRESS:
+            self.camera.process_keyboard('RIGHT', self.delta_time, self.camera_speed * speed_boost)
             
     def _on_mouse_move(self, window, xpos, ypos):
+        """
+        Handle mouse movement to control camera orientation.
+        
+        Args:
+            window: The GLFW window that received the event
+            xpos (float): Current x-coordinate of the mouse
+            ypos (float): Current y-coordinate of the mouse
+        """
         if self.first_mouse:
             self.last_x = xpos
             self.last_y = ypos
             self.first_mouse = False
-            
+            return
+        
+        # Calculate offset from last position
         xoffset = xpos - self.last_x
         yoffset = self.last_y - ypos  # Reversed since y-coordinates go from bottom to top
         self.last_x = xpos
         self.last_y = ypos
         
-        sensitivity = 0.1
-        xoffset *= sensitivity
-        yoffset *= sensitivity
-        
-        self.yaw += xoffset
-        self.pitch += yoffset
-        
-        # Constrain pitch to avoid screen flip
-        if self.pitch > 89.0:
-            self.pitch = 89.0
-        if self.pitch < -89.0:
-            self.pitch = -89.0
-            
-        # Update camera front vector
-        front = np.array([
-            math.cos(math.radians(self.yaw)) * math.cos(math.radians(self.pitch)),
-            math.sin(math.radians(self.pitch)),
-            math.sin(math.radians(self.yaw)) * math.cos(math.radians(self.pitch))
-        ], dtype=np.float32)
-        self.camera_front = front / np.linalg.norm(front)
+        # Let the Camera class handle the orientation update
+        self.camera.process_mouse_movement(xoffset, yoffset)
     
     def render(self):
         # Set up mouse callbacks
         glfw.set_cursor_pos_callback(self.window, self._on_mouse_move)
         glfw.set_input_mode(self.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
         
-        # Set up projection matrix
-        projection = Matrix44.perspective_projection(
-            45.0, self.width / self.height, 0.1, 100.0
-        )
+        # Update camera aspect ratio based on window size
+        self.camera.set_aspect_ratio(self.width, self.height)
         
         while not glfw.window_should_close(self.window):
             # Per-frame time logic
@@ -460,17 +457,14 @@ class Renderer:
             self.ctx.clear(0.1, 0.1, 0.1, 1.0)
             self.ctx.clear(depth=1.0)
             
-            # Update camera-related uniforms
-            view = Matrix44.look_at(
-                self.camera_pos,
-                self.camera_pos + self.camera_front,
-                self.camera_up
-            )
+            # Get view and projection matrices from camera
+            view = self.camera.get_view_matrix()
+            projection = self.camera.get_projection_matrix()
             
-            # Set view and projection matrices
+            # Set view and projection matrices in shader
             self.prog['view'].write(view.astype('f4').tobytes())
             self.prog['projection'].write(projection.astype('f4').tobytes())
-            self.prog['viewPos'].write(self.camera_pos.astype('f4').tobytes())
+            self.prog['viewPos'].write(np.array(self.camera.position, dtype='f4').tobytes())
             
             # Draw all objects in the scene
             for name, obj in self.scene.get_objects():

@@ -182,16 +182,60 @@ For more, see the `renderer.py` source and the test walkthrough in `tests/render
 
 ## Camera System
 
-The camera system implements a first-person camera with:
-- **Position**: 3D location in world space
-- **Orientation**: Defined by yaw and pitch angles
-- **View Frustum**: Defined by field of view and aspect ratio
-- **Movement**: WASD controls with speed boost (Shift key)
-- **Looking**: Mouse movement controls view direction
+The camera system is encapsulated in the `Camera` class (`src/camera.py`). It provides all camera-related functionality, including position, orientation, movement, mouse look, and projection matrix management.
 
-Key matrices:
-- **View Matrix**: Transforms from world space to camera space
-- **Projection Matrix**: Defines the view frustum (perspective)
+### Features
+- **Position**: 3D location in world space (Vector3)
+- **Orientation**: Controlled by yaw (horizontal) and pitch (vertical) angles
+- **View Frustum**: Field of view (FOV), aspect ratio, near/far planes
+- **Movement**: WASD controls, with speed boost using Shift
+- **Mouse Look**: Mouse controls for smooth first-person looking
+- **Zoom**: Mouse wheel adjusts FOV
+- **Aspect Ratio Handling**: Updates automatically on window resize
+
+### Key Matrices
+- **View Matrix**: Transforms from world space to camera space (via `camera.get_view_matrix()`)
+- **Projection Matrix**: Defines the perspective frustum (via `camera.get_projection_matrix()`)
+
+### Camera API
+```python
+from camera import Camera
+from pyrr import Vector3
+
+# Create a camera at position (0, 0, 3), looking along -Z
+camera = Camera(position=Vector3([0, 0, 3]), up=Vector3([0, 1, 0]), yaw=-90.0, pitch=0.0)
+
+# Move camera (called each frame)
+camera.process_keyboard('FORWARD', delta_time, speed)
+camera.process_keyboard('LEFT', delta_time, speed)
+
+# Mouse look (called on mouse move)
+camera.process_mouse_movement(xoffset, yoffset)
+
+# Zoom (called on mouse scroll)
+camera.process_mouse_scroll(yoffset)
+
+# Update aspect ratio (called on window resize)
+camera.set_aspect_ratio(width, height)
+
+# Get matrices for shader uniforms
+view_matrix = camera.get_view_matrix()
+projection_matrix = camera.get_projection_matrix()
+```
+
+### Usage in Renderer
+- The `Renderer` class owns a `Camera` instance (`self.camera`).
+- Input callbacks and the render loop update the camera each frame.
+- View and projection matrices are sent to shaders as uniforms.
+
+### Controls
+- `WASD`: Move camera
+- Mouse: Look around
+- Mouse wheel: Zoom (change FOV)
+- `Left Shift`: Speed boost
+- `ESC`: Exit
+
+The camera uses a right-handed coordinate system with Y-up. Movement is frame-rate independent and mouse look is smooth and constrained to avoid flipping.
 
 ## Vertex and Buffer Management
 
